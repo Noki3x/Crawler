@@ -10,6 +10,8 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
+    "anthropic>=2.3",
+    "pydantic>=2.7",
 ]
 
 [project.optional-dependencies]
