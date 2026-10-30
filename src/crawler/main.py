@@ -8,7 +8,8 @@ from .analysis import all_jobs
 from .collectors import all_collectors
 from .config import settings
 from .db import Alert, CoinTick, CollectorRun, DexTick, Item, ItemAnalysis, make_session_factory
-from .runner import run_all
+from .runner import Bot, run_all
+from .wallets import WalletTracker
 
 
 def status(sessions) -> None:
@@ -31,9 +32,12 @@ def status(sessions) -> None:
 
 def cli() -> None:
     parser = argparse.ArgumentParser(prog="crawler")
-    parser.add_argument("command", choices=["run", "once", "status"], help=(
-        "run: collect and analyse forever on a schedule; once: one round of every job; status: show what's stored"
+    parser.add_argument("command", choices=["serve", "run", "once", "status"], help=(
+        "serve: run the bot with the web terminal; run: run the bot without it; "
+        "once: one round of every job; status: show what's stored"
     ))
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--only", nargs="*", help="limit to these collector names")
     args = parser.parse_args()
 
@@ -43,8 +47,18 @@ def cli() -> None:
     if args.command == "status":
         status(sessions)
         return
-    collectors = [c for c in [*all_collectors(), *all_jobs()] if not args.only or c.name in args.only]
-    asyncio.run(run_all(collectors, sessions, forever=args.command == "run"))
+    jobs = [j for j in [*all_collectors(), *all_jobs(), WalletTracker()] if not args.only or j.name in args.only]
+    if args.command == "serve":
+        if not settings.dashboard_password:
+            parser.error("set DASHBOARD_PASSWORD before starting the terminal")
+        import uvicorn
+
+        from .web.app import create_app
+
+        uvicorn.run(create_app(Bot(jobs, sessions), sessions), host=args.host, port=args.port,
+                    log_level=settings.log_level.lower())
+        return
+    asyncio.run(run_all(jobs, sessions, forever=args.command == "run"))
 
 
 if __name__ == "__main__":

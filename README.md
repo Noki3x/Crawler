@@ -31,12 +31,37 @@ Every run is logged in `collector_runs`, so later the terminal can show what the
 
 Results land in `item_analyses`, `alerts` and `token_safety`. Claude batches 25 items per request and caches its instructions, so a busy day costs a few dollars on Opus. Set `ANTHROPIC_MODEL=claude-haiku-5-5` to make it much cheaper.
 
+## The terminal
+
+`crawler serve` runs the bot and a web terminal on port 8000, protected by `DASHBOARD_PASSWORD` (any username).
+
+- **Feed:** every item with its AI tags, live. Filter by major, minor, hacks, regulatory, social or noise, or search headlines.
+- **Alerts:** rug risks, thin liquidity, crashes, hacks, major news and wallet moves as they happen.
+- **Market:** top gainers over 1h and 24h, losers, majors, and trending DEX tokens with their liquidity. The header shows total market cap, how many coins are up, and the bullish/bearish split of the last 6h of news.
+- **Wallets:** balances and USD value for your wallets, plus an alert whenever something comes in or goes out.
+- **Bot:** each job's state with pause, resume and run-now buttons, a live log of what the bot is doing, and a command line (`help` lists the commands; press `/` to jump to it).
+
+### Adding your wallets
+
+Use public addresses only. Never paste a seed phrase or private key anywhere; the terminal refuses anything that looks like one.
+
+```
+wallet add solana <address> Phantom
+wallet add solana <address> Axiom
+wallet add solana <address> FOMO
+wallet add ethereum <address> Ledger ETH
+wallet add bitcoin <address> Ledger BTC
+```
+
+Axiom and FOMO use Solana wallets under the hood, so add the Solana address each app shows you. For a Ledger, add the receive address for each coin from Ledger Live. Solana wallets show SOL and every SPL token. EVM wallets show the native coin (ETH, BNB, POL) and Bitcoin shows BTC. ERC-20 tokens aren't tracked yet.
+
 ## Run it locally
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
-cp .env.example .env
+cp .env.example .env   # set DASHBOARD_PASSWORD at least
+crawler serve     # bot + terminal at http://localhost:8000
 crawler once      # one round of every collector
 crawler status    # what's been stored and the latest runs
 crawler run       # keep collecting on a schedule
@@ -55,6 +80,8 @@ docker compose up -d --build
 docker compose logs -f crawler
 docker compose exec crawler crawler status
 ```
+
+The terminal is then at `http://<server-ip>:8000`. Put it behind HTTPS before using it over the internet, because basic auth sends the password with every request. The simplest way is [Caddy](https://caddyserver.com) with a domain name, or a Cloudflare Tunnel.
 
 Both containers restart automatically if they crash or the server reboots.
 

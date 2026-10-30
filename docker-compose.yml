@@ -17,6 +17,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://crawler:${POSTGRES_PASSWORD:-crawler}@db:5432/crawler
     depends_on:
