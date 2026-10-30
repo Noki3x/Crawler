@@ -13,6 +13,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    # SQLite hands back naive datetimes; everything is stored in UTC.
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).isoformat()
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -137,6 +144,33 @@ class TokenSafety(Base):
     risk_score: Mapped[float | None] = mapped_column(Float)  # 0 safe .. 1 dangerous
     risks: Mapped[list] = mapped_column(JSON, default=list)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class Wallet(Base):
+    """A wallet you own, tracked by its public address only. Never store keys or seed phrases."""
+
+    __tablename__ = "wallets"
+    __table_args__ = (UniqueConstraint("chain", "address"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    label: Mapped[str] = mapped_column(String(64))
+    chain: Mapped[str] = mapped_column(String(16))  # solana | ethereum | base | bitcoin ...
+    address: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WalletBalance(Base):
+    """One asset in one wallet at one moment."""
+
+    __tablename__ = "wallet_balances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    wallet_id: Mapped[int] = mapped_column(Integer, index=True)
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    symbol: Mapped[str] = mapped_column(String(64))
+    token_address: Mapped[str] = mapped_column(String(128), default="")
+    amount: Mapped[float] = mapped_column(Float)
+    value_usd: Mapped[float | None] = mapped_column(Float)
 
 
 def add_alert(session: Session, dedupe_key: str, **fields) -> bool:

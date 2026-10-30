@@ -12,6 +12,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "anthropic>=2.3",
     "pydantic>=2.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -31,3 +33,6 @@ where = ["src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+crawler = ["web/static/*"]

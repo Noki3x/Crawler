@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crawler Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+:root {
+  --bg: #07090c;
+  --panel: #0c1015;
+  --panel-2: #10161d;
+  --line: #1c2631;
+  --text: #c9d4df;
+  --dim: #6b7b8c;
+  --faint: #3d4b59;
+  --green: #3ddc84;
+  --red: #ff5c6c;
+  --amber: #ffb547;
+  --cyan: #4cc9f0;
+  --violet: #b892ff;
+  --glow: 0 0 12px rgba(61, 220, 132, .25);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 12.5px/1.45 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--cyan); }
+button {
+  font: inherit; color: var(--dim); background: transparent; border: 1px solid var(--line);
+  padding: 1px 7px; cursor: pointer; border-radius: 2px;
+}
+button:hover { color: var(--text); border-color: var(--dim); }
+button.on { color: var(--bg); background: var(--green); border-color: var(--green); }
+
+header {
+  display: flex; align-items: center; gap: 18px; padding: 8px 14px;
+  border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5;
+}
+.brand { font-weight: 700; letter-spacing: .18em; color: var(--green); text-shadow: var(--glow); white-space: nowrap; }
+.brand .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); margin-right: 8px; vertical-align: 1px; }
+.brand .dot.live { background: var(--green); box-shadow: var(--glow); animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.ticker { display: flex; gap: 18px; overflow: hidden; white-space: nowrap; flex: 1; mask-image: linear-gradient(90deg, #000 92%, transparent); }
+.ticker span b { color: var(--text); font-weight: 600; margin-right: 6px; }
+.stats { display: flex; gap: 16px; white-space: nowrap; color: var(--dim); }
+.stats b { color: var(--text); font-weight: 600; }
+
+main {
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 260px;
+  grid-template-areas:
+    "feed alerts market"
+    "feed wallets signals"
+    "console console console";
+  height: calc(100vh - 39px);
+}
+section { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+#feed { grid-area: feed; } #alerts { grid-area: alerts; } #market { grid-area: market; }
+#wallets { grid-area: wallets; } #signals { grid-area: signals; } #console { grid-area: console; }
+.head {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line);
+  background: var(--panel-2); flex-wrap: wrap;
+}
+.head h2 { margin: 0 auto 0 0; font-size: 11px; letter-spacing: .14em; color: var(--dim); font-weight: 600; }
+.head h2::before { content: "▍"; color: var(--green); margin-right: 4px; }
+.body { overflow-y: auto; flex: 1; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.empty { color: var(--faint); padding: 14px 10px; }
+input {
+  font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  padding: 2px 6px; border-radius: 2px; outline: none; min-width: 0;
+}
+input:focus { border-color: var(--green); }
+
+.row { padding: 6px 10px; border-bottom: 1px solid #111820; }
+.row:hover { background: #0f151c; }
+.row.fresh { animation: flash 2.5s ease-out; }
+@keyframes flash { from { background: rgba(61, 220, 132, .12); } }
+.meta { color: var(--dim); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.title { color: var(--text); margin-top: 1px; display: block; }
+.summary { color: var(--dim); margin-top: 2px; }
+.tag { font-size: 10px; padding: 0 5px; border-radius: 2px; border: 1px solid currentColor; letter-spacing: .06em; }
+.major { color: var(--amber); } .minor { color: var(--cyan); } .noise { color: var(--faint); } .unrated { color: var(--faint); }
+.up, .bullish { color: var(--green); } .down, .bearish { color: var(--red); } .neutral { color: var(--dim); }
+.critical { color: var(--red); } .warn { color: var(--amber); } .info { color: var(--cyan); }
+.coin { color: var(--violet); }
+
+.alert { border-left: 2px solid currentColor; }
+.alert .title { color: var(--text); }
+
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 3px 10px; text-align: right; white-space: nowrap; }
+th { color: var(--faint); font-weight: 400; font-size: 11px; position: sticky; top: 0; background: var(--panel); }
+td:first-child, th:first-child { text-align: left; }
+tr:hover td { background: #0f151c; }
+.sub { color: var(--faint); font-size: 10.5px; padding: 8px 10px 2px; letter-spacing: .1em; }
+
+.wallet { padding: 8px 10px; border-bottom: 1px solid #111820; }
+.wallet .top { display: flex; justify-content: space-between; gap: 8px; }
+.wallet .addr { color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wallet .hold { display: flex; justify-content: space-between; color: var(--dim); font-size: 11.5px; }
+.total { font-weight: 700; color: var(--green); }
+
+#console .body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); min-height: 0; }
+.jobs { border-right: 1px solid var(--line); overflow-y: auto; }
+.job { display: flex; gap: 8px; align-items: center; padding: 3px 10px; }
+.job .name { width: 120px; color: var(--text); }
+.job .state { width: 74px; }
+.job .last { flex: 1; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log { overflow-y: auto; padding: 4px 10px; display: flex; flex-direction: column-reverse; }
+.log div { white-space: pre-wrap; word-break: break-word; }
+.log .t { color: var(--faint); }
+.prompt { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); background: var(--bg); }
+.prompt label { color: var(--green); white-space: nowrap; }
+.prompt input { flex: 1; border: none; background: transparent; padding: 0; }
+.caret { color: var(--green); }
+
+@media (max-width: 1100px) {
+  main {
+    height: auto; grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none; grid-template-areas: "alerts" "feed" "market" "signals" "wallets" "console";
+  }
+  section { max-height: 70vh; }
+  #console { max-height: none; }
+  #console .body { grid-template-columns: minmax(0, 1fr); height: 420px; }
+  .jobs { border-right: none; border-bottom: 1px solid var(--line); }
+  .stats { display: none; }
+  header { padding: 8px 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="live"></span>CRAWLER</div>
+  <div class="ticker" id="ticker"></div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <section id="feed">
+    <div class="head">
+      <h2>FEED</h2>
+      <span id="feed-tabs"></span>
+      <input id="search" placeholder="search" size="12">
+    </div>
+    <div class="body" id="feed-body"><div class="empty">Waiting for the first items…</div></div>
+  </section>
+
+  <section id="alerts">
+    <div class="head"><h2>ALERTS</h2><span id="alert-tabs"></span></div>
+    <div class="body" id="alerts-body"><div class="empty">No alerts yet.</div></div>
+  </section>
+
+  <section id="market">
+    <div class="head"><h2>MARKET</h2><span id="market-tabs"></span></div>
+    <div class="body" id="market-body"><div class="empty">Waiting for prices…</div></div>
+  </section>
+
+  <section id="wallets">
+    <div class="head"><h2>WALLETS</h2><span class="total" id="wallet-total"></span></div>
+    <div class="body" id="wallets-body"></div>
+  </section>
+
+  <section id="signals">
+    <div class="head"><h2>SIGNALS</h2><span id="signal-tabs"></span></div>
+    <div class="body" id="signals-body"><div class="empty">Predictions arrive with step 4.</div></div>
+  </section>
+
+  <section id="console">
+    <div class="head"><h2>BOT</h2><span style="color:var(--dim)">type <b style="color:var(--text)">help</b> below</span></div>
+    <div class="body">
+      <div class="jobs" id="jobs"></div>
+      <div class="log" id="log"></div>
+    </div>
+    <form class="prompt" id="prompt"><label>crawler&gt;</label><input id="cmd" autocomplete="off" spellcheck="false" aria-label="command"><span class="caret">█</span></form>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? esc(u) : "#");
+const ago = (iso) => {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${Math.floor(s)}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+};
+const usd = (n, d) => {
+  if (n == null) return "–";
+  const a = Math.abs(n);
+  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e4) return `$${(n / 1e3).toFixed(1)}K`;
+  if (d != null) return `$${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+  if (a >= 1) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `$${n.toPrecision(3)}`;
+};
+const pct = (n) => (n == null ? `<span class="neutral">–</span>` : `<span class="${n >= 0 ? "up" : "down"}">${n >= 0 ? "+" : ""}${n.toFixed(1)}%</span>`);
+const clock = (d = new Date()) => d.toTimeString().slice(0, 8);
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function tabs(el, options, current, onPick) {
+  el.innerHTML = options.map(([k, label]) => `<button data-k="${k}" class="${k === current ? "on" : ""}">${label}</button>`).join(" ");
+  el.onclick = (e) => {
+    const k = e.target.dataset?.k;
+    if (k == null) return;
+    el.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
+    onPick(k);
+  };
+}
+
+/* ---------- log ---------- */
+function log(text, cls = "") {
+  const div = document.createElement("div");
+  div.innerHTML = `<span class="t">${clock()}</span> <span class="${cls}">${esc(text)}</span>`;
+  $("log").prepend(div);
+  while ($("log").childElementCount > 300) $("log").lastChild.remove();
+}
+
+/* ---------- feed ---------- */
+const FEED_TABS = [["", "ALL"], ["major", "MAJOR"], ["minor", "MINOR"], ["hack", "HACKS"], ["regulatory", "REG"], ["social", "SOCIAL"], ["noise", "NOISE"]];
+const feedState = { tab: "", q: "", items: new Map() };
+
+function itemHtml(it, fresh) {
+  const imp = it.importance || "unrated";
+  const arrow = { bullish: "▲", bearish: "▼", neutral: "■" }[it.sentiment] || "";
+  const coins = (it.coins || []).map((c) => `<span class="coin">$${esc(c)}</span>`).join(" ");
+  return `<div class="row${fresh ? " fresh" : ""}" data-id="${it.id}">
+    <div class="meta"><span>${ago(it.published_at)}</span>
+      <span class="tag ${imp}">${imp.toUpperCase()}</span>
+      ${arrow ? `<span class="${it.sentiment}">${arrow} ${esc(it.sentiment)}</span>` : ""}
+      ${coins}<span>${esc(it.source)}</span>${it.kind !== "news" ? `<span>${esc(it.kind)}</span>` : ""}</div>
+    <a class="title" href="${safeUrl(it.url)}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>
+    ${it.summary ? `<div class="summary">${esc(it.summary)}</div>` : ""}
+  </div>`;
+}
+
+function feedMatches(it) {
+  const t = feedState.tab;
+  if (t === "noise") return it.importance === "noise";
+  if (it.importance === "noise") return false;
+  if (t === "major" || t === "minor") { if (it.importance !== t) return false; }
+  else if (t && it.kind !== t) return false;
+  return !feedState.q || it.title.toLowerCase().includes(feedState.q.toLowerCase());
+}
+
+function renderFeed(freshIds = new Set()) {
+  const list = [...feedState.items.values()].filter(feedMatches).sort((a, b) => (b.published_at || "").localeCompare(a.published_at || "") || b.id - a.id).slice(0, 300);
+  $("feed-body").innerHTML = list.length ? list.map((it) => itemHtml(it, freshIds.has(it.id))).join("") : `<div class="empty">Nothing here yet.</div>`;
+}
+
+async function loadFeed() {
+  const t = feedState.tab;
+  const params = new URLSearchParams({ limit: 300 });
+  if (t === "noise") params.set("importance", "noise");
+  else if (t === "major" || t === "minor") params.set("importance", t);
+  else if (t) params.set("kind", t);
+  if (feedState.q) params.set("q", feedState.q);
+  for (const it of await api(`/api/feed?${params}`)) feedState.items.set(it.id, it);
+  renderFeed();
+}
+
+/* ---------- alerts ---------- */
+const alertState = { tab: "", list: [] };
+const ALERT_TABS = [["", "ALL"], ["critical", "CRIT"], ["rug", "RUGS"], ["hack", "HACKS"], ["wallet", "WALLET"]];
+function alertMatches(a) {
+  const t = alertState.tab;
+  if (t === "critical") return a.severity === "critical";
+  if (t === "rug") return ["rug_risk", "low_liquidity", "crash"].includes(a.kind);
+  return !t || a.kind === t;
+}
+function renderAlerts(freshIds = new Set()) {
+  const list = alertState.list.filter(alertMatches).slice(0, 200);
+  $("alerts-body").innerHTML = list.length ? list.map((a) => `
+    <div class="row alert ${a.severity}${freshIds.has(a.id) ? " fresh" : ""}">
+      <div class="meta"><span>${ago(a.created_at)}</span><span class="tag ${a.severity}">${esc(a.kind.replace("_", " ").toUpperCase())}</span>${a.chain ? `<span>${esc(a.chain)}</span>` : ""}</div>
+      ${a.url ? `<a class="title" href="${safeUrl(a.url)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>` : `<span class="title">${esc(a.title)}</span>`}
+      ${a.detail ? `<div class="summary">${esc(a.detail)}</div>` : ""}
+    </div>`).join("") : `<div class="empty">No alerts.</div>`;
+}
+
+/* ---------- market ---------- */
+const marketState = { tab: "g1h", data: null };
+const MARKET_TABS = [["g1h", "▲1H"], ["g24h", "▲24H"], ["l24h", "▼24H"], ["majors", "MAJORS"], ["dex", "DEX"]];
+function renderMarket() {
+  const d = marketState.data;
+  if (!d || !d.updated_at) return;
+  const m = d.market;
+  $("ticker").innerHTML = d.majors.map((c) => `<span><b>${esc(c.symbol)}</b>${usd(c.price)} ${pct(c.ch24h)}</span>`).join("");
+  const mood = m.news_bullish + m.news_bearish;
+  $("stats").innerHTML = `
+    <span>CAP <b>${usd(m.total_cap)}</b> ${pct(m.weighted_change_24h)}</span>
+    <span>BREADTH <b>${m.breadth_up == null ? "–" : Math.round(m.breadth_up * 100) + "% up"}</b></span>
+    <span>NEWS 6H <b class="up">${m.news_bullish}▲</b> <b class="down">${m.news_bearish}▼</b>${mood ? ` <b class="${m.news_bullish >= m.news_bearish ? "up" : "down"}">${Math.round(100 * m.news_bullish / mood)}% bull</b>` : ""}</span>`;
+  let html;
+  if (marketState.tab === "dex") {
+    html = `<table><tr><th>TOKEN</th><th>PRICE</th><th>LIQ</th><th>VOL 24H</th><th>24H</th></tr>${d.dex_trending.map((t) => `
+      <tr><td><a href="${safeUrl(t.url)}" target="_blank" rel="noopener noreferrer"><span class="coin">${esc(t.symbol)}</span> <span style="color:var(--faint)">${esc(t.chain)}</span></a></td>
+      <td>${usd(t.price)}</td><td class="${t.liquidity != null && t.liquidity < 25000 ? "warn" : ""}">${usd(t.liquidity)}</td><td>${usd(t.volume)}</td><td>${pct(t.ch24h)}</td></tr>`).join("")}</table>`;
+  } else {
+    const rows = { g1h: d.gainers_1h, g24h: d.gainers_24h, l24h: d.losers_24h, majors: d.majors }[marketState.tab];
+    html = `<table><tr><th>COIN</th><th>PRICE</th><th>1H</th><th>24H</th><th>7D</th></tr>${rows.map((c) => `
+      <tr><td><span class="coin">${esc(c.symbol)}</span></td><td>${usd(c.price)}</td><td>${pct(c.ch1h)}</td><td>${pct(c.ch24h)}</td><td>${pct(c.ch7d)}</td></tr>`).join("")}</table>`;
+  }
+  $("market-body").innerHTML = html + `<div class="sub">UPDATED ${ago(d.updated_at)} AGO</div>`;
+}
+async function loadMarket() {
+  marketState.data = await api("/api/overview");
+  renderMarket();
+}
+
+/* ---------- wallets ---------- */
+async function loadWallets() {
+  const ws = await api("/api/wallets");
+  $("wallet-total").textContent = ws.length ? usd(ws.reduce((s, w) => s + w.total_usd, 0), 2) : "";
+  $("wallets-body").innerHTML = ws.length ? ws.map((w) => `
+    <div class="wallet">
+      <div class="top"><span><b>${esc(w.label)}</b> <span style="color:var(--faint)">#${w.id} ${esc(w.chain)}</span></span><span class="total">${usd(w.total_usd, 2)}</span></div>
+      <div class="addr">${esc(w.address)}</div>
+      ${w.holdings.slice(0, 8).map((h) => `<div class="hold"><span>${esc(h.symbol)} ${Number(h.amount).toLocaleString(undefined, { maximumSignificantDigits: 6 })}</span><span>${usd(h.value_usd, 2)}</span></div>`).join("")}
+      ${w.holdings.length > 8 ? `<div class="hold"><span>+${w.holdings.length - 8} more</span></div>` : ""}
+      ${w.updated_at ? "" : `<div class="hold"><span>fetching…</span></div>`}
+    </div>`).join("") : `<div class="empty">No wallets yet. Add one with<br><span style="color:var(--text)">wallet add solana &lt;address&gt; Phantom</span><br><br>Public addresses only. Never paste a seed phrase or private key.</div>`;
+}
+
+/* ---------- jobs ---------- */
+let jobs = [];
+function renderJobs() {
+  $("jobs").innerHTML = jobs.map((j) => {
+    const st = j.running ? `<span class="info">running</span>` : j.paused ? `<span class="warn">paused</span>` : `<span class="up">idle</span>`;
+    const l = j.last_run;
+    const last = !l ? "not run yet" : l.error ? `<span class="down">${esc(l.error)}</span>` : `${ago(l.started_at)} ago · ${l.fetched} seen · ${l.stored} new`;
+    return `<div class="job"><span class="name">${esc(j.name)}</span><span class="state">${st}</span><span class="last">${last}</span>
+      <button data-a="${j.paused ? "resume" : "pause"}" data-j="${esc(j.name)}">${j.paused ? "▶" : "❚❚"}</button>
+      <button data-a="run" data-j="${esc(j.name)}">run</button></div>`;
+  }).join("");
+}
+$("jobs").onclick = async (e) => {
+  const { a, j } = e.target.dataset || {};
+  if (!a) return;
+  await control(j, a);
+};
+async function control(name, action) {
+  try {
+    const st = await api(`/api/jobs/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+    jobs = jobs.map((j) => (j.name === st.name ? st : j));
+    renderJobs();
+    log(`${action} ${name}`, "info");
+  } catch (err) { log(err.message, "down"); }
+}
+
+/* ---------- live stream ---------- */
+function connect() {
+  const es = new EventSource("/api/stream");
+  es.onopen = () => $("live").classList.add("live");
+  es.onerror = () => $("live").classList.remove("live");
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const freshItems = new Set(d.items.map((i) => i.id));
+    for (const it of [...d.items, ...d.tagged]) feedState.items.set(it.id, it);
+    if (d.items.length || d.tagged.length) renderFeed(freshItems);
+    if (d.alerts.length) {
+      const known = new Set(alertState.list.map((a) => a.id));
+      const fresh = d.alerts.filter((a) => !known.has(a.id));
+      alertState.list = [...fresh, ...alertState.list].sort((a, b) => b.id - a.id);
+      renderAlerts(new Set(fresh.map((a) => a.id)));
+      fresh.filter((a) => a.severity === "critical").forEach((a) => log(`ALERT ${a.title}`, "critical"));
+    }
+    for (const r of d.runs.slice().reverse()) {
+      log(r.error ? `${r.collector} failed: ${r.error}` : `${r.collector} · ${r.fetched} seen · ${r.stored} new · ${r.seconds}s`, r.error ? "down" : "");
+      if (r.collector === "wallets") loadWallets();
+      if (r.collector === "coingecko" || r.collector === "dexscreener") loadMarket();
+    }
+    jobs = d.jobs;
+    renderJobs();
+  };
+}
+
+/* ---------- commands ---------- */
+const HELP = [
+  "help                              this list",
+  "jobs                              list jobs and their state",
+  "pause <job> | resume <job>        stop or restart a job",
+  "run <job> | run all               run a job now",
+  "feed <all|major|minor|hack|regulatory|social|noise>",
+  "search <text> | search            filter the feed by headline",
+  "wallet add <chain> <address> [label]   chains: solana bitcoin ethereum base arbitrum optimism bsc polygon",
+  "wallet rm <id>                    stop tracking a wallet",
+  "clear                             clear this log",
+];
+async function runCommand(line) {
+  const [cmd, ...args] = line.trim().split(/\s+/);
+  log(`> ${line}`, "caret");
+  switch ((cmd || "").toLowerCase()) {
+    case "": return;
+    case "help": HELP.forEach((h) => log(h)); return;
+    case "clear": $("log").innerHTML = ""; return;
+    case "jobs": jobs.forEach((j) => log(`${j.name.padEnd(16)} ${j.paused ? "paused" : "active"} every ${j.interval_seconds}s`)); return;
+    case "pause": case "resume": return control(args[0], cmd);
+    case "run":
+      if (args[0] === "all") { for (const j of jobs) await control(j.name, "run"); return; }
+      return control(args[0], "run");
+    case "feed": {
+      const k = args[0] === "all" ? "" : args[0] || "";
+      if (!FEED_TABS.some(([t]) => t === k)) return log("unknown feed filter", "down");
+      feedState.tab = k;
+      tabs($("feed-tabs"), FEED_TABS, k, pickFeed);
+      return loadFeed();
+    }
+    case "search":
+      feedState.q = args.join(" ");
+      $("search").value = feedState.q;
+      return loadFeed();
+    case "wallet":
+      if (args[0] === "add") {
+        const [chain, address, ...label] = args.slice(1);
+        if (!chain || !address) return log("usage: wallet add <chain> <address> [label]", "down");
+        try {
+          const r = await api("/api/wallets", { method: "POST", body: JSON.stringify({ chain, address, label: label.join(" ") || chain }) });
+          log(`tracking wallet #${r.id}`, "up");
+          setTimeout(loadWallets, 500);
+        } catch (err) { log(err.message, "down"); }
+        return;
+      }
+      if (args[0] === "rm") {
+        try { await api(`/api/wallets/${encodeURIComponent(args[1])}`, { method: "DELETE" }); log(`removed wallet #${args[1]}`, "up"); loadWallets(); }
+        catch (err) { log(err.message, "down"); }
+        return;
+      }
+      return log("usage: wallet add <chain> <address> [label] | wallet rm <id>", "down");
+    default: log(`unknown command: ${cmd}. Type help.`, "down");
+  }
+}
+const history = [];
+let hIdx = 0;
+$("prompt").onsubmit = (e) => {
+  e.preventDefault();
+  const line = $("cmd").value;
+  $("cmd").value = "";
+  if (line.trim()) { history.push(line); hIdx = history.length; }
+  runCommand(line);
+};
+$("cmd").onkeydown = (e) => {
+  if (e.key === "ArrowUp" && hIdx > 0) { $("cmd").value = history[--hIdx]; e.preventDefault(); }
+  if (e.key === "ArrowDown") { hIdx = Math.min(history.length, hIdx + 1); $("cmd").value = history[hIdx] || ""; }
+};
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement.tagName !== "INPUT") { e.preventDefault(); $("cmd").focus(); }
+});
+
+/* ---------- boot ---------- */
+function pickFeed(k) { feedState.tab = k; loadFeed(); }
+let searchTimer;
+$("search").oninput = (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { feedState.q = e.target.value; loadFeed(); }, 300); };
+tabs($("feed-tabs"), FEED_TABS, "", pickFeed);
+tabs($("alert-tabs"), ALERT_TABS, "", (k) => { alertState.tab = k; renderAlerts(); });
+tabs($("market-tabs"), MARKET_TABS, "g1h", (k) => { marketState.tab = k; renderMarket(); });
+
+(async () => {
+  log("connected. type help for commands, / to focus.", "up");
+  try {
+    alertState.list = await api("/api/alerts?limit=200");
+    renderAlerts();
+    jobs = await api("/api/jobs");
+    renderJobs();
+    await Promise.all([loadFeed(), loadMarket(), loadWallets()]);
+  } catch (err) { log(err.message, "down"); }
+  connect();
+  // Keep relative times and slow-moving panels fresh.
+  setInterval(() => { renderFeed(); renderAlerts(); renderJobs(); }, 30000);
+  setInterval(loadMarket, 60000);
+})();
+</script>
+</body>
+</html>

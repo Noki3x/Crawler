@@ -3,4 +3,5 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
-CMD ["crawler", "run"]
+EXPOSE 8000
+CMD ["crawler", "serve"]

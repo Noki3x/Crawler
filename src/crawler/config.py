@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
@@ -19,6 +19,16 @@ class Settings:
     anthropic_effort: str = os.getenv("ANTHROPIC_EFFORT", "low")
     # Below this much DEX liquidity a token gets a low-liquidity warning.
     low_liquidity_usd: float = float(os.getenv("LOW_LIQUIDITY_USD", "25000"))
+    # Wallet tracking uses free public RPCs; swap in your own (Helius, Alchemy...) if they rate-limit you.
+    solana_rpc_url: str = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+    evm_rpc_urls: dict = field(default_factory=lambda: {
+        chain: url for chain in ("ethereum", "base", "arbitrum", "optimism", "bsc", "polygon")
+        if (url := os.getenv(f"{chain.upper()}_RPC_URL"))
+    })
+    # Wallet moves smaller than this (in USD) don't raise an alert.
+    wallet_min_move_usd: float = float(os.getenv("WALLET_MIN_MOVE_USD", "5"))
+    # Required to open the terminal. Anyone with it can see your wallets and control the bot.
+    dashboard_password: str = os.getenv("DASHBOARD_PASSWORD", "")
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     user_agent: str = "CryptoNewsCrawler/0.1 (+https://github.com/Noki3x/Crawler)"
 
