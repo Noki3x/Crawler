@@ -14,12 +14,12 @@ The plan has four steps:
 | Collector | Source | Every | Stored as |
 |---|---|---|---|
 | `rss` | CoinDesk, Cointelegraph, Decrypt, The Block, Bitcoin Magazine, CryptoSlate, Rekt (hacks), SEC and CFTC press releases | 2 min | `items` |
-| `reddit` | r/CryptoCurrency, r/CryptoMarkets, r/Bitcoin, r/ethereum, r/solana, r/SatoshiStreetBets | 3 min | `items` (kind `social`) |
+| `reddit` | r/CryptoCurrency, r/CryptoMarkets, r/Bitcoin, r/ethereum, r/solana, r/SatoshiStreetBets (needs Reddit API keys, see below) | 3 min | `items` (kind `social`) |
 | `coingecko` | Top 250 coins: price, market cap, volume, 1h/24h/7d change | 2 min | `coin_ticks` |
 | `dexscreener` | Trending and newly listed DEX tokens: price, liquidity, volume, pair age | 2 min | `dex_ticks` |
 | `defillama_hacks` | DeFiLlama hack database: amount stolen, technique, chains | 15 min | `items` (kind `hack`) |
 
-Every run is logged in `collector_runs`, so later the terminal can show what the bot is doing and what's failing. News is de-duplicated by URL. All sources are free and need no API key; a free CoinGecko Demo key raises its rate limit.
+Every run is logged in `collector_runs`, so later the terminal can show what the bot is doing and what's failing. News is de-duplicated by URL. All sources are free. Only Reddit needs a key: it blocks anonymous requests from servers, so create a free "script" app at https://www.reddit.com/prefs/apps and set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` in `.env`. Without them the Reddit collector is skipped. A free CoinGecko Demo key raises its rate limit.
 
 ## Run it locally
 

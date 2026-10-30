@@ -20,7 +20,7 @@ class Feed:
 
 
 FEEDS = [
-    Feed("coindesk", "news", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+    Feed("coindesk", "news", "https://www.coindesk.com/arc/outboundfeeds/rss"),
     Feed("cointelegraph", "news", "https://cointelegraph.com/rss"),
     Feed("decrypt", "news", "https://decrypt.co/feed"),
     Feed("theblock", "news", "https://www.theblock.co/rss.xml"),

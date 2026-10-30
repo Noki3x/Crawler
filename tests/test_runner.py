@@ -35,3 +35,24 @@ async def test_run_once_records_errors(tmp_path):
         run = await run_once(collector, client, sessions)
 
     assert run.error == "RuntimeError: every feed failed"
+
+
+@respx.mock
+async def test_reddit_uses_oauth_token():
+    from crawler.collectors.reddit import RedditCollector
+
+    token = respx.post("https://www.reddit.com/api/v1/access_token").mock(
+        return_value=httpx.Response(200, json={"access_token": "tok", "expires_in": 86400})
+    )
+    listing = respx.get("https://oauth.reddit.com/r/solana/new").mock(return_value=httpx.Response(200, json={
+        "data": {"children": [{"data": {"title": "SOL", "permalink": "/r/solana/comments/1/x/", "subreddit": "solana"}}]}
+    }))
+    collector = RedditCollector("id", "secret", ["solana"])
+
+    async with make_client() as client:
+        first = await collector.collect(client)
+        await collector.collect(client)
+
+    assert [i.title for i in first] == ["SOL"]
+    assert token.call_count == 1
+    assert listing.calls.last.request.headers["Authorization"] == "Bearer tok"
