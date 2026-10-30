@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crawler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crawler}
+      POSTGRES_DB: crawler
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crawler"]
+      interval: 5s
+      retries: 10
+
+  crawler:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://crawler:${POSTGRES_PASSWORD:-crawler}@db:5432/crawler
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
