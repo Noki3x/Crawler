@@ -4,9 +4,10 @@ import logging
 
 from sqlalchemy import func, select
 
+from .analysis import all_jobs
 from .collectors import all_collectors
 from .config import settings
-from .db import CoinTick, CollectorRun, DexTick, Item, make_session_factory
+from .db import Alert, CoinTick, CollectorRun, DexTick, Item, ItemAnalysis, make_session_factory
 from .runner import run_all
 
 
@@ -17,6 +18,10 @@ def status(sessions) -> None:
             print(f"  {kind:<12} {count}")
         print(f"Coin ticks:   {session.scalar(select(func.count()).select_from(CoinTick))}")
         print(f"DEX ticks:    {session.scalar(select(func.count()).select_from(DexTick))}")
+        print(f"Analysed:     {session.scalar(select(func.count()).select_from(ItemAnalysis))}")
+        print("\nLatest alerts:")
+        for a in session.scalars(select(Alert).order_by(Alert.id.desc()).limit(10)):
+            print(f"  [{a.severity:<8}] {a.kind:<13} {a.title[:90]}")
         print("\nLatest runs:")
         runs = session.scalars(select(CollectorRun).order_by(CollectorRun.id.desc()).limit(10))
         for r in runs:
@@ -27,7 +32,7 @@ def status(sessions) -> None:
 def cli() -> None:
     parser = argparse.ArgumentParser(prog="crawler")
     parser.add_argument("command", choices=["run", "once", "status"], help=(
-        "run: collect forever on a schedule; once: one round of every collector; status: show what's stored"
+        "run: collect and analyse forever on a schedule; once: one round of every job; status: show what's stored"
     ))
     parser.add_argument("--only", nargs="*", help="limit to these collector names")
     args = parser.parse_args()
@@ -38,7 +43,7 @@ def cli() -> None:
     if args.command == "status":
         status(sessions)
         return
-    collectors = [c for c in all_collectors() if not args.only or c.name in args.only]
+    collectors = [c for c in [*all_collectors(), *all_jobs()] if not args.only or c.name in args.only]
     asyncio.run(run_all(collectors, sessions, forever=args.command == "run"))
 
 

@@ -21,6 +21,16 @@ The plan has four steps:
 
 Every run is logged in `collector_runs`, so later the terminal can show what the bot is doing and what's failing. News is de-duplicated by URL. All sources are free. Only Reddit needs a key: it blocks anonymous requests from servers, so create a free "script" app at https://www.reddit.com/prefs/apps and set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` in `.env`. Without them the Reddit collector is skipped. A free CoinGecko Demo key raises its rate limit.
 
+## What it analyses
+
+| Job | What it does | Every |
+|---|---|---|
+| `classifier` | Claude reads each new item and tags it major / minor / noise, bullish / bearish / neutral, with a category, the coins it affects and a one-line summary. Major news and hacks become alerts. Needs `ANTHROPIC_API_KEY`. | 1 min |
+| `token_watch` | Flags trending DEX tokens with thin liquidity, liquidity pulled by 50%+ in 6h, or a 70%+ crash. It also runs each token through RugCheck (Solana) or GoPlus (EVM chains) once a day and alerts on honeypots, mint/freeze authority, hidden owners, high taxes and similar. | 2 min |
+| `hack_alerts` | Turns hack reports from the last 3 days into alerts straight away. Hacks over $10M are critical. | 2 min |
+
+Results land in `item_analyses`, `alerts` and `token_safety`. Claude batches 25 items per request and caches its instructions, so a busy day costs a few dollars on Opus. Set `ANTHROPIC_MODEL=claude-haiku-5-5` to make it much cheaper.
+
 ## Run it locally
 
 ```bash

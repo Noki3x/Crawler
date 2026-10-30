@@ -86,6 +86,68 @@ class CollectorRun(Base):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class ItemAnalysis(Base):
+    """Claude's read of one item: how big it is, which way it cuts, and which coins it touches."""
+
+    __tablename__ = "item_analyses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    importance: Mapped[str] = mapped_column(String(8), index=True)  # major | minor | noise
+    sentiment: Mapped[str] = mapped_column(String(8), index=True)  # bullish | bearish | neutral
+    category: Mapped[str] = mapped_column(String(24), index=True)
+    coins: Mapped[list] = mapped_column(JSON, default=list)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    model: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class Alert(Base):
+    """Something worth interrupting you for: major news, hacks, rug risks, thin liquidity."""
+
+    __tablename__ = "alerts"
+    __table_args__ = (UniqueConstraint("dedupe_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dedupe_key: Mapped[str] = mapped_column(String(200), index=True)
+    kind: Mapped[str] = mapped_column(String(24), index=True)
+    severity: Mapped[str] = mapped_column(String(8), index=True)  # info | warn | critical
+    title: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    symbol: Mapped[str] = mapped_column(String(64), default="")
+    chain: Mapped[str] = mapped_column(String(32), default="")
+    token_address: Mapped[str] = mapped_column(String(128), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # Set once the alert has been pushed to your phone (step 4).
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TokenSafety(Base):
+    """Cached RugCheck / GoPlus verdicts so each token is checked at most once a day."""
+
+    __tablename__ = "token_safety"
+    __table_args__ = (UniqueConstraint("chain", "token_address"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chain: Mapped[str] = mapped_column(String(32))
+    token_address: Mapped[str] = mapped_column(String(128))
+    provider: Mapped[str] = mapped_column(String(16))
+    risk_score: Mapped[float | None] = mapped_column(Float)  # 0 safe .. 1 dangerous
+    risks: Mapped[list] = mapped_column(JSON, default=list)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+def add_alert(session: Session, dedupe_key: str, **fields) -> bool:
+    """Insert an alert unless one with the same key exists. Returns True if it was new."""
+    if session.scalar(select(Alert.id).where(Alert.dedupe_key == dedupe_key)):
+        return False
+    session.add(Alert(dedupe_key=dedupe_key[:200], **fields))
+    session.flush()
+    return True
+
+
 def make_session_factory(database_url: str) -> sessionmaker[Session]:
     engine = create_engine(database_url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
