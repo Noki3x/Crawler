@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, DateTime, Float, Integer, String, Text, UniqueConstraint, create_engine, select,
+    JSON, DateTime, Float, Integer, String, Text, UniqueConstraint, create_engine, event, select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -206,7 +206,13 @@ def add_alert(session: Session, dedupe_key: str, **fields) -> bool:
 
 
 def make_session_factory(database_url: str) -> sessionmaker[Session]:
-    engine = create_engine(database_url, pool_pre_ping=True)
+    sqlite = database_url.startswith("sqlite")
+    # The bot's jobs and the terminal write at the same time; let SQLite writers wait instead of failing.
+    engine = create_engine(database_url, pool_pre_ping=True, connect_args={"timeout": 30} if sqlite else {})
+    if sqlite:
+        @event.listens_for(engine, "connect")
+        def _wal(conn, _record):
+            conn.execute("PRAGMA journal_mode=WAL")
     Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
@@ -218,6 +224,7 @@ def url_hash(url: str) -> str:
 def store(session: Session, records: list[Record]) -> int:
     """Save records and return how many were new. News is de-duplicated by URL."""
     stored = 0
+    taken_at = utcnow()  # one timestamp per run, so a snapshot can be selected with taken_at == max(taken_at)
     news = [r for r in records if isinstance(r, NewsItem)]
     if news:
         hashes = {url_hash(n.url): n for n in news}
@@ -232,10 +239,10 @@ def store(session: Session, records: list[Record]) -> int:
             stored += 1
     for r in records:
         if isinstance(r, CoinSnapshot):
-            session.add(CoinTick(**vars(r)))
+            session.add(CoinTick(**vars(r), taken_at=taken_at))
             stored += 1
         elif isinstance(r, DexPairSnapshot):
-            session.add(DexTick(**vars(r)))
+            session.add(DexTick(**vars(r), taken_at=taken_at))
             stored += 1
     session.commit()
     return stored

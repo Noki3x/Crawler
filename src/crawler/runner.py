@@ -91,14 +91,23 @@ class Bot:
         state.wake.set()
 
     async def _loop(self, state: JobState, client: httpx.AsyncClient) -> None:
+        if isinstance(state.job, Job):
+            await self._collected.wait()  # analysis jobs start once every collector has a first result
         while True:
             if not state.paused or state.force:
                 state.force = False
                 state.running = True
                 try:
                     state.last_run = await run_once(state.job, client, self.sessions)
+                except Exception:
+                    # One bad run (e.g. the database briefly unavailable) must not stop the bot.
+                    log.exception("%s: run failed", state.job.name)
                 finally:
                     state.running = False
+                    if not isinstance(state.job, Job):
+                        self._pending.discard(state.job.name)
+                        if not self._pending:
+                            self._collected.set()
             state.next_run_at = None if state.paused else utcnow() + timedelta(seconds=state.job.interval_seconds)
             state.wake.clear()
             try:
@@ -107,6 +116,10 @@ class Bot:
                 pass
 
     async def run(self) -> None:
+        self._pending = {n for n, s in self.states.items() if not isinstance(s.job, Job)}
+        self._collected = asyncio.Event()
+        if not self._pending:
+            self._collected.set()
         async with make_client() as client:
             await asyncio.gather(*(self._loop(s, client) for s in self.states.values()))
 
@@ -115,5 +128,9 @@ async def run_all(collectors: list[Collector | Job], sessions: sessionmaker[Sess
     if forever:
         await Bot(collectors, sessions).run()
         return []
+    # Collectors first, so the analysis jobs in the same round see fresh data.
+    fetchers = [c for c in collectors if not isinstance(c, Job)]
+    jobs = [c for c in collectors if isinstance(c, Job)]
     async with make_client() as client:
-        return list(await asyncio.gather(*(run_once(c, client, sessions) for c in collectors)))
+        runs = list(await asyncio.gather(*(run_once(c, client, sessions) for c in fetchers)))
+        return runs + list(await asyncio.gather(*(run_once(j, client, sessions) for j in jobs)))

@@ -56,3 +56,18 @@ async def test_reddit_uses_oauth_token():
     assert [i.title for i in first] == ["SOL"]
     assert token.call_count == 1
     assert listing.calls.last.request.headers["Authorization"] == "Bearer tok"
+
+
+def test_latest_snapshot_ignores_a_run_seconds_earlier(tmp_path):
+    from crawler.db import store
+    from crawler.records import CoinSnapshot
+    from crawler.web.queries import overview
+
+    sessions = make_session_factory(f"sqlite:///{tmp_path}/t.db")
+    btc = dict(coin_id="bitcoin", symbol="BTC", name="Bitcoin", market_cap_usd=2e12, volume_24h_usd=5e10,
+               change_1h_pct=0.1, change_24h_pct=1.0, change_7d_pct=2.0)
+    with sessions() as s:
+        store(s, [CoinSnapshot(price_usd=100_000, **btc)])
+        store(s, [CoinSnapshot(price_usd=101_000, **btc)])
+        majors = overview(s)["majors"]
+    assert [m["price"] for m in majors] == [101_000]
