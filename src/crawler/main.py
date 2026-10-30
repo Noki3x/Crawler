@@ -9,6 +9,8 @@ from .collectors import all_collectors
 from .config import settings
 from .db import Alert, CoinTick, CollectorRun, DexTick, Item, ItemAnalysis, make_session_factory
 from .runner import Bot, run_all
+from .notify import Notifier
+from .signals import Signals
 from .wallets import WalletTracker
 
 
@@ -47,7 +49,13 @@ def cli() -> None:
     if args.command == "status":
         status(sessions)
         return
-    jobs = [j for j in [*all_collectors(), *all_jobs(), WalletTracker()] if not args.only or j.name in args.only]
+    extra = [WalletTracker(), Signals()]
+    notifier = Notifier()
+    if notifier.configured:
+        extra.append(notifier)
+    else:
+        logging.getLogger(__name__).info("phone alerts off: set NTFY_TOPIC or TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID")
+    jobs = [j for j in [*all_collectors(), *all_jobs(), *extra] if not args.only or j.name in args.only]
     if args.command == "serve":
         if not settings.dashboard_password:
             parser.error("set DASHBOARD_PASSWORD before starting the terminal")

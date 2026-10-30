@@ -170,7 +170,7 @@ tr:hover td { background: #0f151c; }
 
   <section id="signals">
     <div class="head"><h2>SIGNALS</h2><span id="signal-tabs"></span></div>
-    <div class="body" id="signals-body"><div class="empty">Predictions arrive with step 4.</div></div>
+    <div class="body" id="signals-body"><div class="empty">The first signals appear after an hour of price data.</div></div>
   </section>
 
   <section id="console">
@@ -329,6 +329,49 @@ async function loadMarket() {
   renderMarket();
 }
 
+/* ---------- signals ---------- */
+const signalState = { tab: "runners", data: null };
+const SIGNAL_TABS = [["runners", "RUNNERS"], ["dex", "DEX"], ["call", "CALL"], ["record", "RECORD"]];
+const rate = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
+function renderSignals() {
+  const d = signalState.data;
+  if (!d) return;
+  const call = d.market;
+  $("signal-tabs").title = d.at ? `updated ${ago(d.at)} ago` : "";
+  let html = "";
+  if (signalState.tab === "runners") {
+    html = d.runners.length ? `<table><tr><th>#</th><th>COIN</th><th>PRICE</th><th>SCORE</th></tr>${d.runners.map((r, i) => `
+      <tr><td>${i + 1}</td><td style="text-align:left"><span class="coin">${esc(r.symbol)}</span></td><td>${usd(r.price)}</td><td class="up">${r.score.toFixed(2)}</td></tr>
+      <tr><td></td><td colspan="3" style="text-align:left;color:var(--dim);white-space:normal">${esc(r.reasons.join(" · ") || "broad momentum")}</td></tr>`).join("")}</table>`
+      : `<div class="empty">No coin stands out right now.</div>`;
+  } else if (signalState.tab === "dex") {
+    html = d.dex.length ? `<table><tr><th>TOKEN</th><th>LIQ</th><th>24H</th><th>RISK</th></tr>${d.dex.map((t) => `
+      <tr><td><a href="${safeUrl(t.url)}" target="_blank" rel="noopener noreferrer"><span class="coin">${esc(t.symbol)}</span> <span style="color:var(--faint)">${esc(t.chain)}</span></a></td>
+      <td>${usd(t.liquidity)}</td><td>${pct(t.ch24h)}</td><td class="${t.risk > 0.2 ? "warn" : "up"}" title="${esc((t.risks || []).join("; "))}">${Math.round((t.risk || 0) * 100)}</td></tr>`).join("")}</table>
+      <div class="sub">PASSED RUGCHECK/GOPLUS · STILL HIGH RISK</div>` : `<div class="empty">No DEX token passes the liquidity and safety checks.</div>`;
+  } else if (signalState.tab === "call") {
+    html = call ? `<div class="row"><div style="font-size:22px;font-weight:700" class="${call.direction}">${call.direction.toUpperCase()} <span style="font-size:13px">${call.score >= 0 ? "+" : ""}${call.score.toFixed(2)}</span></div>
+      <div class="meta">NEXT 24H · ${d.at ? `${ago(d.at)} AGO` : ""}</div>
+      ${call.reasons.map((r) => `<div class="summary">· ${esc(r)}</div>`).join("")}</div>` : `<div class="empty">No call yet.</div>`;
+  } else {
+    const r = d.record;
+    html = `<table>
+      <tr><td>Runner picks scored</td><td>${r.runner_picks}</td></tr>
+      <tr><td>Hit rate (up and beat market)</td><td class="${r.runner_hit_rate >= 0.5 ? "up" : "down"}">${rate(r.runner_hit_rate)}</td></tr>
+      <tr><td>Avg pick return 24h</td><td>${pct(r.runner_avg_return_pct)}</td></tr>
+      <tr><td>Market return same windows</td><td>${pct(r.market_avg_return_pct)}</td></tr>
+      <tr><td>Market calls scored</td><td>${r.market_calls}</td></tr>
+      <tr><td>Market call hit rate</td><td class="${r.market_hit_rate >= 0.5 ? "up" : "down"}">${rate(r.market_hit_rate)}</td></tr>
+      <tr><td>Waiting to be scored</td><td>${r.pending}</td></tr></table>
+      <div class="sub">LAST ${r.days} DAYS · SIGNALS, NOT ADVICE</div>`;
+  }
+  $("signals-body").innerHTML = html;
+}
+async function loadSignals() {
+  signalState.data = await api("/api/signals");
+  renderSignals();
+}
+
 /* ---------- wallets ---------- */
 async function loadWallets() {
   const ws = await api("/api/wallets");
@@ -390,6 +433,7 @@ function connect() {
       log(r.error ? `${r.collector} failed: ${r.error}` : `${r.collector} · ${r.fetched} seen · ${r.stored} new · ${r.seconds}s`, r.error ? "down" : "");
       if (r.collector === "wallets") loadWallets();
       if (r.collector === "coingecko" || r.collector === "dexscreener") loadMarket();
+      if (r.collector === "signals" || r.collector === "token_watch") loadSignals();
     }
     jobs = d.jobs;
     renderJobs();
@@ -406,6 +450,7 @@ const HELP = [
   "search <text> | search            filter the feed by headline",
   "wallet add <chain> <address> [label]   chains: solana bitcoin ethereum base arbitrum optimism bsc polygon",
   "wallet rm <id>                    stop tracking a wallet",
+  "signals                           print the market call and top runners",
   "clear                             clear this log",
 ];
 async function runCommand(line) {
@@ -448,6 +493,14 @@ async function runCommand(line) {
         return;
       }
       return log("usage: wallet add <chain> <address> [label] | wallet rm <id>", "down");
+    case "signals": {
+      await loadSignals();
+      const d = signalState.data;
+      if (d.market) log(`market: ${d.market.direction} (${d.market.score.toFixed(2)}) · ${d.market.reasons.join(" · ")}`, d.market.direction === "bearish" ? "down" : "up");
+      d.runners.slice(0, 5).forEach((r, i) => log(`${i + 1}. ${r.symbol} ${r.score.toFixed(2)} · ${r.reasons.join(" · ")}`));
+      if (!d.market && !d.runners.length) log("no signals yet");
+      return;
+    }
     default: log(`unknown command: ${cmd}. Type help.`, "down");
   }
 }
@@ -475,6 +528,7 @@ $("search").oninput = (e) => { clearTimeout(searchTimer); searchTimer = setTimeo
 tabs($("feed-tabs"), FEED_TABS, "", pickFeed);
 tabs($("alert-tabs"), ALERT_TABS, "", (k) => { alertState.tab = k; renderAlerts(); });
 tabs($("market-tabs"), MARKET_TABS, "g1h", (k) => { marketState.tab = k; renderMarket(); });
+tabs($("signal-tabs"), SIGNAL_TABS, "runners", (k) => { signalState.tab = k; renderSignals(); });
 
 (async () => {
   log("connected. type help for commands, / to focus.", "up");
@@ -483,12 +537,12 @@ tabs($("market-tabs"), MARKET_TABS, "g1h", (k) => { marketState.tab = k; renderM
     renderAlerts();
     jobs = await api("/api/jobs");
     renderJobs();
-    await Promise.all([loadFeed(), loadMarket(), loadWallets()]);
+    await Promise.all([loadFeed(), loadMarket(), loadWallets(), loadSignals()]);
   } catch (err) { log(err.message, "down"); }
   connect();
   // Keep relative times and slow-moving panels fresh.
   setInterval(() => { renderFeed(); renderAlerts(); renderJobs(); }, 30000);
-  setInterval(loadMarket, 60000);
+  setInterval(() => { loadMarket(); loadSignals(); }, 60000);
 })();
 </script>
 </body>
