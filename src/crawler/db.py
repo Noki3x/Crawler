@@ -173,6 +173,29 @@ class WalletBalance(Base):
     value_usd: Mapped[float | None] = mapped_column(Float)
 
 
+class Prediction(Base):
+    """A call the bot made, scored against what actually happened once its horizon passes."""
+
+    __tablename__ = "predictions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch: Mapped[int] = mapped_column(Integer, index=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # market | runner
+    subject: Mapped[str] = mapped_column(String(128))  # "market" or a CoinGecko id
+    symbol: Mapped[str] = mapped_column(String(32), default="")
+    direction: Mapped[str] = mapped_column(String(8))  # bullish | bearish | neutral
+    score: Mapped[float] = mapped_column(Float)
+    rank: Mapped[int | None] = mapped_column(Integer)
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    start_value: Mapped[float | None] = mapped_column(Float)  # price, or total market cap for market calls
+    horizon_hours: Mapped[int] = mapped_column(Integer, default=24)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    outcome_pct: Mapped[float | None] = mapped_column(Float)
+    market_pct: Mapped[float | None] = mapped_column(Float)
+    hit: Mapped[bool | None] = mapped_column()
+
+
 def add_alert(session: Session, dedupe_key: str, **fields) -> bool:
     """Insert an alert unless one with the same key exists. Returns True if it was new."""
     if session.scalar(select(Alert.id).where(Alert.dedupe_key == dedupe_key)):

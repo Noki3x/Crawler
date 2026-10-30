@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..config import settings
 from ..db import Wallet, WalletBalance
 from ..runner import Bot
+from ..signals import latest_signals
 from ..wallets import validate_address, wallet_summary
 from . import queries
 
@@ -80,6 +81,11 @@ def create_app(bot: Bot, sessions: sessionmaker[Session], start_bot: bool = True
             raise HTTPException(400, "action must be pause, resume or run")
         actions[action](name)
         return bot.states[name].to_dict()
+
+    @app.get("/api/signals")
+    def signals():
+        with sessions() as s:
+            return latest_signals(s)
 
     @app.get("/api/wallets")
     def wallets():

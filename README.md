@@ -7,7 +7,7 @@ The plan has four steps:
 1. **Collectors and server** (this code): pull news, social posts, prices, DEX liquidity, hacks and regulator notices into one database, 24/7.
 2. **AI analysis**: Claude tags each item as major or minor and bullish or bearish, and names the coins it affects. Token-safety checks drive rug-pull and low-liquidity warnings.
 3. **Terminal app**: a live dashboard to control the bot, see what it's reading, and track your wallets by public address.
-4. **Predictions and alerts**: daily "top runners" and market-direction signals, backtested, with phone alerts.
+4. **Predictions and alerts**: daily "top runners" and market-direction signals, scored against what happened, with phone alerts.
 
 ## What it collects
 
@@ -30,6 +30,23 @@ Every run is logged in `collector_runs`, so later the terminal can show what the
 | `hack_alerts` | Turns hack reports from the last 3 days into alerts straight away. Hacks over $10M are critical. | 2 min |
 
 Results land in `item_analyses`, `alerts` and `token_safety`. Claude batches 25 items per request and caches its instructions, so a busy day costs a few dollars on Opus. Set `ANTHROPIC_MODEL=claude-haiku-5-5` to make it much cheaper.
+
+## Signals and predictions
+
+The `signals` job runs every hour (type `run signals` to force it):
+
+- **Market call:** bullish, bearish or neutral for the next 24h. It's built from cap-weighted 1h and 24h momentum, how many coins are up, the bullish/bearish balance of the last 6h of news, and recent hacks.
+- **Top runners:** coins with at least $5M daily volume, ranked on 1h and 24h momentum, trading volume relative to size, volume acceleration over 6h, and news sentiment. Stablecoins and wrapped tokens are excluded, and coins with a recent hack or rug alert are marked down.
+- **DEX runners:** trending DEX tokens that are rising, have at least $100K liquidity, and passed RugCheck or GoPlus. They're still high risk.
+- **Track record:** every call is saved and scored 24h later. A runner counts as a hit only if it went up and beat the market over the same window. The terminal's RECORD tab shows the hit rates over the last 30 days, so you can judge how much to trust the signals before acting on them.
+
+These are signals from public data, not financial advice. No model reliably predicts crypto prices.
+
+## Phone alerts
+
+Set `NTFY_TOPIC` to get push notifications through the free [ntfy](https://ntfy.sh) app. Install it, subscribe to a long random topic name (anyone who knows the name can read it), and put the same name in `.env`. Telegram works too, through `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+
+By default you get critical alerts (big hacks, major news, rug pulls), every move in or out of your wallets, the day's top runners at 12:00 UTC, and any time the market call flips. Change this with `NOTIFY_MIN_SEVERITY` and `NOTIFY_KINDS`.
 
 ## The terminal
 
