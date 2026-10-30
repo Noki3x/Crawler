@@ -1,0 +1,122 @@
+import hashlib
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    JSON, DateTime, Float, Integer, String, Text, UniqueConstraint, create_engine, select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+from .records import CoinSnapshot, DexPairSnapshot, NewsItem, Record
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Item(Base):
+    """Anything worth reading: articles, posts, hack reports, regulator notices."""
+
+    __tablename__ = "items"
+    __table_args__ = (UniqueConstraint("url_hash"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    url_hash: Mapped[str] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # Filled in by the AI analysis step (step 2).
+    analysed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CoinTick(Base):
+    __tablename__ = "coin_ticks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    coin_id: Mapped[str] = mapped_column(String(128), index=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(128))
+    price_usd: Mapped[float | None] = mapped_column(Float)
+    market_cap_usd: Mapped[float | None] = mapped_column(Float)
+    volume_24h_usd: Mapped[float | None] = mapped_column(Float)
+    change_1h_pct: Mapped[float | None] = mapped_column(Float)
+    change_24h_pct: Mapped[float | None] = mapped_column(Float)
+    change_7d_pct: Mapped[float | None] = mapped_column(Float)
+
+
+class DexTick(Base):
+    __tablename__ = "dex_ticks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    chain: Mapped[str] = mapped_column(String(32), index=True)
+    pair_address: Mapped[str] = mapped_column(String(128), index=True)
+    dex: Mapped[str] = mapped_column(String(64))
+    base_symbol: Mapped[str] = mapped_column(String(64))
+    base_address: Mapped[str] = mapped_column(String(128), index=True)
+    quote_symbol: Mapped[str] = mapped_column(String(64))
+    price_usd: Mapped[float | None] = mapped_column(Float)
+    liquidity_usd: Mapped[float | None] = mapped_column(Float)
+    volume_24h_usd: Mapped[float | None] = mapped_column(Float)
+    change_24h_pct: Mapped[float | None] = mapped_column(Float)
+    pair_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    url: Mapped[str] = mapped_column(Text)
+
+
+class CollectorRun(Base):
+    """One row per collector run, so the terminal can show what the bot is doing."""
+
+    __tablename__ = "collector_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    collector: Mapped[str] = mapped_column(String(64), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    fetched: Mapped[int] = mapped_column(Integer, default=0)
+    stored: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+def make_session_factory(database_url: str) -> sessionmaker[Session]:
+    engine = create_engine(database_url, pool_pre_ping=True)
+    Base.metadata.create_all(engine)
+    return sessionmaker(engine, expire_on_commit=False)
+
+
+def url_hash(url: str) -> str:
+    return hashlib.sha256(url.strip().encode()).hexdigest()
+
+
+def store(session: Session, records: list[Record]) -> int:
+    """Save records and return how many were new. News is de-duplicated by URL."""
+    stored = 0
+    news = [r for r in records if isinstance(r, NewsItem)]
+    if news:
+        hashes = {url_hash(n.url): n for n in news}
+        seen = set(session.scalars(select(Item.url_hash).where(Item.url_hash.in_(hashes))))
+        for h, n in hashes.items():
+            if h in seen:
+                continue
+            session.add(Item(
+                url_hash=h, source=n.source, kind=n.kind, title=n.title, url=n.url,
+                summary=n.summary, extra=n.extra, published_at=n.published_at,
+            ))
+            stored += 1
+    for r in records:
+        if isinstance(r, CoinSnapshot):
+            session.add(CoinTick(**vars(r)))
+            stored += 1
+        elif isinstance(r, DexPairSnapshot):
+            session.add(DexTick(**vars(r)))
+            stored += 1
+    session.commit()
+    return stored

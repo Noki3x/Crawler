@@ -1,0 +1,1 @@
+"""Crypto market news crawler."""
