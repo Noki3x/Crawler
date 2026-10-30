@@ -71,7 +71,7 @@ def latest_coins(session: Session) -> list[CoinTick]:
     if last is None:
         return []
     return list(session.scalars(
-        select(CoinTick).where(CoinTick.taken_at >= last - timedelta(minutes=1))
+        select(CoinTick).where(CoinTick.taken_at == last)
         .order_by(CoinTick.market_cap_usd.desc().nulls_last())
     ))
 
@@ -108,7 +108,7 @@ def overview(session: Session) -> dict:
 
     last_dex = session.scalar(select(func.max(DexTick.taken_at)))
     dex = [] if last_dex is None else session.scalars(
-        select(DexTick).where(DexTick.taken_at >= last_dex - timedelta(minutes=1))
+        select(DexTick).where(DexTick.taken_at == last_dex)
         .order_by(DexTick.volume_24h_usd.desc().nulls_last()).limit(15)
     ).all()
 

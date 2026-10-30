@@ -50,7 +50,7 @@ def latest_ticks(session: Session) -> list[CoinTick]:
     last = session.scalar(select(func.max(CoinTick.taken_at)))
     if last is None:
         return []
-    return list(session.scalars(select(CoinTick).where(CoinTick.taken_at >= last - timedelta(minutes=1))))
+    return list(session.scalars(select(CoinTick).where(CoinTick.taken_at == last)))
 
 
 def news_scores(session: Session, hours: int = 24) -> dict[str, float]:
@@ -165,7 +165,7 @@ def total_cap_at(session: Session, when) -> float | None:
     if first is None:
         return None
     return session.scalar(select(func.sum(CoinTick.market_cap_usd)).where(
-        CoinTick.taken_at >= first, CoinTick.taken_at < first + timedelta(minutes=1)))
+        CoinTick.taken_at == first))
 
 
 def resolve(session: Session) -> int:
@@ -224,7 +224,7 @@ def dex_runners(session: Session, top: int = 10) -> list[dict]:
     last = session.scalar(select(func.max(DexTick.taken_at)))
     if last is None:
         return []
-    ticks = session.scalars(select(DexTick).where(DexTick.taken_at >= last - timedelta(minutes=1))).all()
+    ticks = session.scalars(select(DexTick).where(DexTick.taken_at == last)).all()
     safety = {(s.chain, s.token_address): s for s in session.scalars(select(TokenSafety))}
     out = []
     for t in ticks:

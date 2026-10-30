@@ -73,7 +73,7 @@ class TokenWatch(Job):
         latest_at = session.scalar(select(func.max(DexTick.taken_at)))
         if latest_at is None:
             return 0
-        latest = session.scalars(select(DexTick).where(DexTick.taken_at >= latest_at - timedelta(minutes=1))).all()
+        latest = session.scalars(select(DexTick).where(DexTick.taken_at == latest_at)).all()
         day = now.strftime("%Y-%m-%d")
         created = 0
         for t in latest:
@@ -159,7 +159,7 @@ class TokenWatch(Job):
                     title=f"{symbol} ({chain}) flagged as risky by {provider}",
                     detail="; ".join(risks), url=url, symbol=symbol, chain=chain, token_address=address,
                 )
-        session.commit()
+            session.commit()  # don't hold the SQLite write lock across the next HTTP call
         return created
 
     async def run(self, client: httpx.AsyncClient, sessions: sessionmaker[Session]) -> tuple[int, int]:
