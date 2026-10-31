@@ -33,24 +33,24 @@ echo "==> Token works: @$name"
 
 cat <<STEP
 
-  Make sure @$name is an admin of your channel with permission to post.
-  Then post any message in the channel (for example "hello").
+  Make sure @$name is an admin of your channel (or group) with permission to post.
+  Then post any message there (for example "hello").
 
 STEP
 ask "Press Enter once you've posted the message... " >/dev/null
 
 chat=""
 for _ in 1 2 3 4 5 6; do
-  chat=$(api getUpdates | field 'next((str(u["channel_post"]["chat"]["id"]) for u in reversed(d["result"]) if "channel_post" in u), "")')
+  chat=$(api getUpdates | field 'next((str(u[k]["chat"]["id"]) for u in reversed(d["result"]) for k in ("channel_post", "message") if k in u and u[k]["chat"]["type"] != "private"), "")')
   [[ -n $chat ]] && break
-  echo "    waiting for the channel post..."
+  echo "    waiting for your post..."
   sleep 5
 done
 if [[ -z $chat ]]; then
-  echo "Didn't see a post from a channel. Check the bot is an admin there, post again, and rerun." >&2
+  echo "Didn't see a post from a channel or group. Check the bot is an admin there, post again, and rerun." >&2
   exit 1
 fi
-echo "==> Found the channel: $chat"
+echo "==> Found the chat: $chat"
 
 api sendMessage -H 'Content-Type: application/json' \
   -d "{\"chat_id\": \"$chat\", \"text\": \"✅ Crawler connected. Rug pulls, possible rug pulls, hacks and the daily runners will be posted here.\"}" >/dev/null
