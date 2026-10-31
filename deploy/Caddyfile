@@ -1,0 +1,7 @@
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy crawler:8000 {
+		# Live updates are server-sent events, so don't buffer them.
+		flush_interval -1
+	}
+}

@@ -1,0 +1,21 @@
+# Adds HTTPS in front of the terminal and stops exposing port 8000 directly.
+services:
+  crawler:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - crawler
+
+volumes:
+  caddy_data:
