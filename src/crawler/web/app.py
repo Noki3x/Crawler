@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..analysis.tokens import TokenWatch
 from ..collectors.coingecko import fetch_addresses
 from ..config import settings
 from ..db import Wallet, WalletBalance
@@ -103,6 +104,26 @@ def create_app(bot: Bot, sessions: sessionmaker[Session], start_bot: bool = True
             except httpx.HTTPError as exc:
                 raise HTTPException(502, "couldn't reach CoinGecko, try again in a minute") from exc
         return addresses[coin_id]
+
+    @app.get("/api/price/{symbol}")
+    def price(symbol: str):
+        with sessions() as s:
+            return queries.price(s, symbol[:32])
+
+    @app.get("/api/check/{chain}/{address}")
+    async def check_token(chain: str, address: str):
+        """On-demand rug check of one token with RugCheck (Solana) or GoPlus (EVM chains)."""
+        if not address.isalnum() or len(address) > 64:
+            raise HTTPException(400, "that doesn't look like a token address")
+        try:
+            async with make_client() as client:
+                verdict = await TokenWatch().check_token(client, chain.lower(), address)
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(502, "the safety checker didn't answer, try again in a minute") from exc
+        if verdict is None:
+            raise HTTPException(404, "no safety data for that token on that chain")
+        provider, score, risks = verdict
+        return {"provider": provider, "score": score, "risks": risks}
 
     @app.get("/api/wallets")
     def wallets():

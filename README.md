@@ -62,22 +62,32 @@ The bot can also post to a Telegram channel: rug pulls (liquidity pulled out of 
 - **Feed:** every item with its AI tags, live. Filter by major, minor, hacks, regulatory, social or noise, or search headlines.
 - **Alerts:** rug risks, thin liquidity, crashes, hacks, major news and wallet moves as they happen.
 - **Market:** top gainers over 1h and 24h, losers, majors, and trending DEX tokens with their liquidity. The header shows total market cap, how many coins are up, and the bullish/bearish split of the last 6h of news.
-- **Wallets:** balances and USD value for your wallets, plus an alert whenever something comes in or goes out.
-- **Bot:** each job's state with pause, resume and run-now buttons, a live log of what the bot is doing, and a command line (`help` lists the commands; press `/` to jump to it).
+- **Wallets:** balances and USD value for your wallets, plus an alert whenever something comes in or goes out. Add one with the **+ Add** button.
+- **Signals:** top runners (click one for its contract address), DEX runners, the market call and the track record.
+- **Bot control:** each job's state with pause, resume and run buttons, a live log, and a command line. Press `/` to jump to it and Tab to complete a command. Useful ones: `price sol`, `ca bonk`, `check solana <mint>` (rug check any token now), `news`, `alerts 10 rug_risk`, `runners`, `market`, `wallets`, `theme light`. `help` lists them all.
+
+The ◐ button in the header switches between dark and light.
 
 ### Adding your wallets
 
 Use public addresses only. Never paste a seed phrase or private key anywhere; the terminal refuses anything that looks like one.
 
+Use the **+ Add** button on the Wallets card, or type:
+
 ```
 wallet add solana <address> Phantom
-wallet add solana <address> Axiom
-wallet add solana <address> FOMO
+wallet add tron <address> FOMO USDT
+wallet add base <address> FOMO Base
 wallet add ethereum <address> Ledger ETH
 wallet add bitcoin <address> Ledger BTC
 ```
 
-Axiom and FOMO use Solana wallets under the hood, so add the Solana address each app shows you. For a Ledger, add the receive address for each coin from Ledger Live. Solana wallets show SOL and every SPL token. EVM wallets show the native coin (ETH, BNB, POL) and Bitcoin shows BTC. ERC-20 tokens aren't tracked yet.
+Chains: solana, tron, ethereum, base, bsc, arbitrum, optimism, polygon, bitcoin. Add the address the app shows you for that chain; for a Ledger, the receive address for each coin from Ledger Live.
+
+- Solana wallets show SOL and every SPL token, with USDT and USDC counted at $1.
+- Tron wallets show TRX and USDT (TRC-20).
+- EVM wallets show the native coin (ETH, BNB, POL) plus USDT and USDC. Other ERC-20 tokens aren't tracked yet.
+- Bitcoin wallets show BTC.
 
 ## Run it locally
 
