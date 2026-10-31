@@ -39,6 +39,10 @@ class Settings:
     ntfy_server: str = os.getenv("NTFY_SERVER", "https://ntfy.sh")
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    # Alert kinds posted to Telegram whatever their severity (comma-separated): rug pulls and possible
+    # rug pulls, hacks, and the daily top runners.
+    telegram_kinds: set = field(default_factory=lambda: {
+        k.strip() for k in os.getenv("TELEGRAM_KINDS", "rug_risk,hack,picks").split(",") if k.strip()})
     # info | warn | critical. Daily picks and market-call flips are always sent.
     notify_min_severity: str = os.getenv("NOTIFY_MIN_SEVERITY", "critical")
     # Alert kinds pushed whatever their severity (comma-separated). Wallet moves by default.

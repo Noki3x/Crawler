@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 import httpx
@@ -98,3 +99,45 @@ async def test_notifier_pushes_new_alerts_once_and_skips_backlog(tmp_path):
     assert route.call_count == 1
     req = route.calls[0].request
     assert req.content == b"Bridge drained" and req.headers["Click"] == "https://x/h"
+
+
+async def test_telegram_gets_rugs_hacks_and_picks_whatever_their_severity(tmp_path):
+    sessions = make_session_factory(f"sqlite:///{tmp_path}/t.db")
+    with sessions() as s:
+        s.add(Alert(dedupe_key="liqpull:p1:d", kind="rug_risk", severity="critical", title="PEPE2 liquidity fell 90%",
+                    url="https://dex/p1"))
+        s.add(Alert(dedupe_key="rugcheck:solana:x", kind="rug_risk", severity="warn", title="SCAM <flagged>"))
+        s.add(Alert(dedupe_key="item:1", kind="hack", severity="warn", title="Small DEX hacked for $2M"))
+        s.add(Alert(dedupe_key="picks:d", kind="picks", severity="info", title="Today's top runners: SOL"))
+        s.add(Alert(dedupe_key="lowliq:p2:d", kind="low_liquidity", severity="warn", title="thin"))
+        s.commit()
+
+    notifier = Notifier(ntfy_topic="crawler-test", telegram_token="T0K", telegram_chat="-1001",
+                        min_severity="critical", kinds=set(), telegram_kinds={"rug_risk", "hack", "picks"})
+    with respx.mock:
+        ntfy = respx.post("https://ntfy.sh/crawler-test").mock(return_value=httpx.Response(200))
+        tg = respx.post("https://api.telegram.org/botT0K/sendMessage").mock(return_value=httpx.Response(200))
+        async with make_client() as client:
+            assert await notifier.run(client, sessions) == (5, 4)
+    assert ntfy.call_count == 2  # the critical rug pull and the daily picks
+    texts = [json.loads(c.request.content)["text"] for c in tg.calls]
+    assert texts[0].startswith("<b>🚨 RUG PULL</b>") and '<a href="https://dex/p1">' in texts[0]
+    assert texts[1].startswith("<b>⚠️ POSSIBLE RUG PULL</b>") and "SCAM &lt;flagged&gt;" in texts[1]
+    assert "HACK" in texts[2] and "DAILY RUNNERS" in texts[3]
+    assert all(json.loads(c.request.content)["chat_id"] == "-1001" for c in tg.calls)
+
+
+async def test_one_channel_failing_does_not_hold_back_the_other(tmp_path):
+    sessions = make_session_factory(f"sqlite:///{tmp_path}/t.db")
+    with sessions() as s:
+        s.add(Alert(dedupe_key="h", kind="hack", severity="critical", title="Bridge drained"))
+        s.commit()
+    notifier = Notifier(ntfy_topic="crawler-test", telegram_token="T0K", telegram_chat="-1001",
+                        min_severity="critical", kinds=set(), telegram_kinds={"hack"})
+    with respx.mock:
+        respx.post("https://ntfy.sh/crawler-test").mock(return_value=httpx.Response(429))
+        tg = respx.post("https://api.telegram.org/botT0K/sendMessage").mock(return_value=httpx.Response(200))
+        async with make_client() as client:
+            assert await notifier.run(client, sessions) == (1, 1)
+            assert await notifier.run(client, sessions) == (0, 0)
+    assert tg.call_count == 1
