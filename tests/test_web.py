@@ -84,3 +84,17 @@ def test_wallet_add_validates_and_rejects_secrets(client):
     assert w["label"] == "Ledger"
     assert client.delete(f"/api/wallets/{w['id']}").status_code == 204
     assert client.get("/api/wallets").json() == []
+
+
+def test_coin_addresses_looked_up_once_with_solana_first(client):
+    import httpx
+    import respx
+
+    coin = {"id": "bonk", "platforms": {"ethereum": "0xabc", "solana": "DezX", "": ""}}
+    with respx.mock:
+        route = respx.get("https://api.coingecko.com/api/v3/coins/bonk").mock(return_value=httpx.Response(200, json=coin))
+        for _ in range(2):
+            r = client.get("/api/coins/bonk/addresses")
+            assert r.json() == [{"chain": "solana", "address": "DezX"}, {"chain": "ethereum", "address": "0xabc"}]
+    assert route.call_count == 1
+    assert client.get("/api/coins/bad$id/addresses").status_code == 400

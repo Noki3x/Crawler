@@ -4,6 +4,7 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -11,9 +12,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..collectors.coingecko import fetch_addresses
 from ..config import settings
 from ..db import Wallet, WalletBalance
-from ..runner import Bot
+from ..runner import Bot, make_client
 from ..signals import latest_signals
 from ..wallets import validate_address, wallet_summary
 from . import queries
@@ -86,6 +88,21 @@ def create_app(bot: Bot, sessions: sessionmaker[Session], start_bot: bool = True
     def signals():
         with sessions() as s:
             return latest_signals(s)
+
+    # Contract addresses never change, so each coin is looked up on CoinGecko once.
+    addresses: dict[str, list[dict]] = {}
+
+    @app.get("/api/coins/{coin_id}/addresses")
+    async def coin_addresses(coin_id: str):
+        if not coin_id.replace("-", "").isalnum() or len(coin_id) > 100:
+            raise HTTPException(400, "bad coin id")
+        if coin_id not in addresses:
+            try:
+                async with make_client() as client:
+                    addresses[coin_id] = await fetch_addresses(client, coin_id)
+            except httpx.HTTPError as exc:
+                raise HTTPException(502, "couldn't reach CoinGecko, try again in a minute") from exc
+        return addresses[coin_id]
 
     @app.get("/api/wallets")
     def wallets():

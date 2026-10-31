@@ -238,6 +238,7 @@ def dex_runners(session: Session, top: int = 10) -> list[dict]:
         out.append({
             "symbol": t.base_symbol, "chain": t.chain, "price": t.price_usd, "liquidity": t.liquidity_usd,
             "volume": t.volume_24h_usd, "ch24h": t.change_24h_pct, "url": t.url, "score": round(score, 2),
+            "address": t.base_address, "pair": t.pair_address,
             "risk": s.risk_score, "risks": s.risks,
         })
     # Several pairs can trade the same token; keep the best one.
