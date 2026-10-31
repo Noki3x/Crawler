@@ -56,3 +56,23 @@ class CoinGeckoCollector(Collector):
             snapshots.extend(parse_markets(rows))
             page += 1
         return snapshots
+
+
+# Chains listed first are the ones Axiom and FOMO trade on.
+CHAIN_ORDER = ["solana", "base", "ethereum", "binance-smart-chain", "arbitrum-one", "polygon-pos"]
+
+
+def parse_platforms(coin: dict) -> list[dict]:
+    """A coin's contract addresses, one per chain. Native coins like BTC have none."""
+    found = {chain: addr for chain, addr in (coin.get("platforms") or {}).items() if chain and addr}
+    ordered = sorted(found, key=lambda c: (CHAIN_ORDER.index(c) if c in CHAIN_ORDER else len(CHAIN_ORDER), c))
+    return [{"chain": c, "address": found[c]} for c in ordered]
+
+
+async def fetch_addresses(client: httpx.AsyncClient, coin_id: str, api_key: str = settings.coingecko_api_key) -> list[dict]:
+    resp = await client.get(f"{BASE_URL}/coins/{coin_id}", params={
+        "localization": "false", "tickers": "false", "market_data": "false",
+        "community_data": "false", "developer_data": "false",
+    }, headers={"x-cg-demo-api-key": api_key} if api_key else {})
+    resp.raise_for_status()
+    return parse_platforms(resp.json())
