@@ -44,9 +44,16 @@ These are signals from public data, not financial advice. No model reliably pred
 
 ## Phone alerts
 
-Set `NTFY_TOPIC` to get push notifications through the free [ntfy](https://ntfy.sh) app. Install it, subscribe to a long random topic name (anyone who knows the name can read it), and put the same name in `.env`. Telegram works too, through `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
-
+Set `NTFY_TOPIC` to get push notifications through the free [ntfy](https://ntfy.sh) app. Install it, subscribe to a long random topic name (anyone who knows the name can read it), and put the same name in `.env`. 
 By default you get critical alerts (big hacks, major news, rug pulls), every move in or out of your wallets, the day's top runners at 12:00 UTC, and any time the market call flips. Change this with `NOTIFY_MIN_SEVERITY` and `NOTIFY_KINDS`.
+
+### Telegram channel
+
+The bot can also post to a Telegram channel: rug pulls (liquidity pulled out of a pool), possible rug pulls (tokens flagged by RugCheck or GoPlus), hacks of any size, and the daily top runners. Change the list with `TELEGRAM_KINDS`.
+
+1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and follow the prompts. It gives you a token.
+2. Open your channel, go to Administrators, add your new bot, and let it post messages.
+3. On the server, run `bash /opt/crawler/deploy/telegram.sh`. Paste the token when asked (it's hidden and stays in `/opt/crawler/.env`), then post any message in the channel. The script finds the channel, posts a test message, and restarts the bot.
 
 ## The terminal
 

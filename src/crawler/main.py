@@ -44,6 +44,8 @@ def cli() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # httpx logs every request URL at INFO, and Telegram's URL contains the bot token.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     sessions = make_session_factory(settings.database_url)
 
     if args.command == "status":
@@ -54,7 +56,7 @@ def cli() -> None:
     if notifier.configured:
         extra.append(notifier)
     else:
-        logging.getLogger(__name__).info("phone alerts off: set NTFY_TOPIC or TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID")
+        logging.getLogger(__name__).info("alerts off: set NTFY_TOPIC or TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID")
     jobs = [j for j in [*all_collectors(), *all_jobs(), *extra] if not args.only or j.name in args.only]
     if args.command == "serve":
         if not settings.dashboard_password:
