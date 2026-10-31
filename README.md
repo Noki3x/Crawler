@@ -88,19 +88,18 @@ crawler run       # keep collecting on a schedule
 
 ## Run it 24/7 on a server
 
-Any small Linux VPS works (1 vCPU, 1–2 GB RAM). Install Docker, then:
+On a fresh Ubuntu VPS (1 vCPU, 2 GB RAM is plenty), open a root shell (on DigitalOcean: Droplet → Access → Launch Droplet Console). Then run:
 
 ```bash
-git clone https://github.com/Noki3x/Crawler.git && cd Crawler
-cp .env.example .env    # then set a real POSTGRES_PASSWORD
-docker compose up -d --build
-docker compose logs -f crawler
-docker compose exec crawler crawler status
+export GITHUB_TOKEN=<read-only token for this repo>
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/Noki3x/Crawler/main/deploy/setup.sh -o setup.sh
+bash setup.sh
 ```
 
-The terminal is then at `http://<server-ip>:8000`. Put it behind HTTPS before using it over the internet, because basic auth sends the password with every request. The simplest way is [Caddy](https://caddyserver.com) with a domain name, or a Cloudflare Tunnel.
+The script installs Docker and a firewall, asks for your Anthropic API key, and generates the terminal password, database password and ntfy topic. It serves the terminal over HTTPS at `https://<your-ip-with-dashes>.sslip.io` with a free certificate, so no domain is needed. At the end it prints the URL, password and ntfy topic. Run `bash /opt/crawler/deploy/setup.sh` again at any time to update to the latest code; your settings and data are kept.
 
-Both containers restart automatically if they crash or the server reboots.
+Settings live in `/opt/crawler/.env`. After editing it, run `cd /opt/crawler && docker compose -f docker-compose.yml -f deploy/docker-compose.https.yml up -d`.
 
 ## Tests
 
