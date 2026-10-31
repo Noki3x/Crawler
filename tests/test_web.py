@@ -46,7 +46,7 @@ def test_requires_password(client):
 
 def test_index_served(client):
     r = client.get("/")
-    assert r.status_code == 200 and "CRAWLER" in r.text
+    assert r.status_code == 200 and "<title>Crawler Terminal</title>" in r.text
 
 
 def test_feed_hides_noise_by_default(client):
@@ -98,3 +98,22 @@ def test_coin_addresses_looked_up_once_with_solana_first(client):
             assert r.json() == [{"chain": "solana", "address": "DezX"}, {"chain": "ethereum", "address": "0xabc"}]
     assert route.call_count == 1
     assert client.get("/api/coins/bad$id/addresses").status_code == 400
+
+
+def test_price_lookup(client):
+    r = client.get("/api/price/btc").json()
+    assert r["coins"][0]["symbol"] == "BTC" and r["dex"] == []
+    assert client.get("/api/price/nope").json() == {"coins": [], "dex": []}
+
+
+def test_token_check(client):
+    import httpx
+    import respx
+
+    report = {"risks": [{"name": "Mutable metadata", "level": "warn"}]}
+    with respx.mock:
+        respx.get("https://api.rugcheck.xyz/v1/tokens/Mint111/report/summary").mock(
+            return_value=httpx.Response(200, json=report))
+        r = client.get("/api/check/solana/Mint111").json()
+    assert r == {"provider": "rugcheck", "score": 0.2, "risks": ["Mutable metadata"]}
+    assert client.get("/api/check/dogechain/abc").status_code == 404

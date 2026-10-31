@@ -56,3 +56,50 @@ async def test_solana_wallet_balances_and_movements(tmp_path):
         titles = sorted(a.title for a in s.query(Alert))
         assert titles == ["Phantom: received 200 WIF ($500)", "Phantom: sent 1 SOL ($200)"]
         assert s.query(WalletBalance).count() == 4
+
+
+TRON = "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf"
+EVM = "0x28C6c06298d514Db089934071355E5743bf21d60"
+
+
+def test_validate_tron_address():
+    assert validate_address("tron", TRON) is None
+    assert "doesn't look like" in validate_address("tron", "T0O" + TRON[3:])
+
+
+async def test_tron_wallet_tracks_trx_and_usdt(tmp_path):
+    sessions = make_session_factory(f"sqlite:///{tmp_path}/t.db")
+    with sessions() as s:
+        s.add(Wallet(label="FOMO", chain="tron", address=TRON))
+        s.commit()
+    account = {"data": [{"balance": 2_000_000, "trc20": [{"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": "150250000"}]}]}
+    with respx.mock:
+        respx.get(f"https://api.trongrid.io/v1/accounts/{TRON}").mock(return_value=httpx.Response(200, json=account))
+        async with make_client() as client:
+            assert await WalletTracker().run(client, sessions) == (1, 2)
+    with sessions() as s:
+        [w] = wallet_summary(s)
+        assert [(h["symbol"], h["amount"]) for h in w["holdings"]] == [("USDT", 150.25), ("TRX", 2.0)]
+        assert w["total_usd"] == 150.25
+
+
+async def test_evm_wallet_tracks_stablecoins(tmp_path):
+    sessions = make_session_factory(f"sqlite:///{tmp_path}/t.db")
+    with sessions() as s:
+        s.add(Wallet(label="Base", chain="base", address=EVM))
+        s.commit()
+
+    def handler(request):
+        body = __import__("json").loads(request.content)
+        if body["method"] == "eth_getBalance":
+            return httpx.Response(200, json={"result": hex(10**18)})
+        usdc = body["params"][0]["to"].lower() == "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+        return httpx.Response(200, json={"result": hex(42_500_000 if usdc else 0)})
+
+    with respx.mock:
+        respx.post("https://base-rpc.publicnode.com").mock(side_effect=handler)
+        async with make_client() as client:
+            await WalletTracker().run(client, sessions)
+    with sessions() as s:
+        [w] = wallet_summary(s)
+        assert {h["symbol"]: h["amount"] for h in w["holdings"]} == {"ETH": 1.0, "USDC": 42.5}

@@ -27,7 +27,28 @@ EVM_CHAINS = {
     "bsc": ("https://bsc-rpc.publicnode.com", "BNB", "binancecoin"),
     "polygon": ("https://polygon-bor-rpc.publicnode.com", "POL", "polygon-ecosystem-token"),
 }
-CHAINS = ["solana", "bitcoin", *EVM_CHAINS]
+# Stablecoins tracked on each EVM chain: symbol -> (contract, decimals). Counted at $1.
+EVM_STABLES = {
+    "ethereum": {"USDT": ("0xdAC17F958D2ee523a2206206994597C13D831ec7", 6),
+                 "USDC": ("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6)},
+    "base": {"USDT": ("0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", 6),
+             "USDC": ("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6)},
+    "arbitrum": {"USDT": ("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", 6),
+                 "USDC": ("0xaf88d065e77c8cC2239327C5EDb3A432268e5831", 6)},
+    "optimism": {"USDT": ("0x94b008aA00579c1307B0EF2c499aD98a8ce58e58", 6),
+                 "USDC": ("0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", 6)},
+    "bsc": {"USDT": ("0x55d398326f99059fF775485246999027B3197955", 18),
+            "USDC": ("0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18)},
+    "polygon": {"USDT": ("0xc2132D05D31c914a87C6611C10748AEb04B58e8F", 6),
+                "USDC": ("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", 6)},
+}
+SOLANA_STABLES = {
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoFvUmE5GSRhEXTAU8": "USDT",
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+}
+TRON_USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+CHAINS = ["solana", "bitcoin", "tron", *EVM_CHAINS]
+BASE58 = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
 
 def validate_address(chain: str, address: str) -> str | None:
@@ -39,6 +60,8 @@ def validate_address(chain: str, address: str) -> str | None:
         ok = address.startswith("0x") and len(address) == 42
     elif chain == "solana":
         ok = 32 <= len(address) <= 44 and address.isalnum()
+    elif chain == "tron":
+        ok = address.startswith("T") and len(address) == 34 and set(address) <= BASE58
     else:
         ok = address[:1] in ("1", "3") or address.startswith("bc1")
     # Seed phrases have spaces; private keys are much longer than addresses.
@@ -96,14 +119,41 @@ async def price_spl(client: httpx.AsyncClient, mints: list[str]) -> dict[str, tu
     return {m: (sym, price) for m, (sym, price, _) in out.items()}
 
 
+async def evm_stables(client: httpx.AsyncClient, url: str, chain: str, address: str) -> list[WalletBalance]:
+    rows = []
+    for symbol, (contract, decimals) in EVM_STABLES.get(chain, {}).items():
+        # balanceOf(address)
+        data = "0x70a08231" + address[2:].lower().rjust(64, "0")
+        raw = await rpc(client, url, "eth_call", [{"to": contract, "data": data}, "latest"])
+        amount = int(raw, 16) / 10 ** decimals if raw and raw != "0x" else 0.0
+        if amount > 0:
+            rows.append(WalletBalance(symbol=symbol, token_address=contract, amount=amount, value_usd=amount))
+    return rows
+
+
+async def tron_balances(client: httpx.AsyncClient, address: str, prices: dict[str, float]) -> list[WalletBalance]:
+    resp = await client.get(f"https://api.trongrid.io/v1/accounts/{address}")
+    resp.raise_for_status()
+    data = (resp.json().get("data") or [{}])[0]  # empty until the address first receives something
+    trx = (data.get("balance") or 0) / 1e6
+    price = prices.get("tron")
+    rows = [WalletBalance(symbol="TRX", amount=trx, value_usd=trx * price if price is not None else None)]
+    usdt = sum(int(t[TRON_USDT]) for t in data.get("trc20") or [] if TRON_USDT in t) / 1e6
+    if usdt > 0:
+        rows.append(WalletBalance(symbol="USDT", token_address=TRON_USDT, amount=usdt, value_usd=usdt))
+    return rows
+
+
 async def wallet_balances(client: httpx.AsyncClient, wallet: Wallet, prices: dict[str, float]) -> list[WalletBalance]:
     rows: list[WalletBalance] = []
     if wallet.chain == "solana":
         holdings = await solana_holdings(client, wallet.address)
-        mints = [mint for _, mint, _ in holdings if mint]
+        mints = [mint for _, mint, _ in holdings if mint and mint not in SOLANA_STABLES]
         spl = await price_spl(client, mints) if mints else {}
         for symbol, mint, amount in holdings:
-            if mint:
+            if mint in SOLANA_STABLES:
+                symbol, price = SOLANA_STABLES[mint], 1.0
+            elif mint:
                 symbol, price = spl.get(mint, (mint[:4] + "…", None))
             else:
                 price = prices.get("solana")
@@ -117,6 +167,8 @@ async def wallet_balances(client: httpx.AsyncClient, wallet: Wallet, prices: dic
         price = prices.get("bitcoin")
         rows.append(WalletBalance(symbol="BTC", amount=sats / 1e8,
                                   value_usd=sats / 1e8 * price if price is not None else None))
+    elif wallet.chain == "tron":
+        rows = await tron_balances(client, wallet.address, prices)
     else:
         url, symbol, coin_id = EVM_CHAINS[wallet.chain]
         url = settings.evm_rpc_urls.get(wallet.chain, url)
@@ -124,6 +176,7 @@ async def wallet_balances(client: httpx.AsyncClient, wallet: Wallet, prices: dic
         price = prices.get(coin_id)
         rows.append(WalletBalance(symbol=symbol, amount=wei / 1e18,
                                   value_usd=wei / 1e18 * price if price is not None else None))
+        rows += await evm_stables(client, url, wallet.chain, wallet.address)
     for r in rows:
         r.wallet_id = wallet.id
     return rows

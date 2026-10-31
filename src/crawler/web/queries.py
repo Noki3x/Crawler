@@ -131,3 +131,17 @@ def overview(session: Session) -> dict:
             "volume": d.volume_24h_usd, "ch24h": d.change_24h_pct, "url": d.url,
         } for d in dex],
     }
+
+
+def price(session: Session, symbol: str) -> dict:
+    """The latest price for a ticker: CoinGecko coins first, then DEX tokens with that symbol."""
+    sym = symbol.strip().upper()
+    coins = [coin_row(c) for c in latest_coins(session) if c.symbol.upper() == sym][:3]
+    last_dex = session.scalar(select(func.max(DexTick.taken_at)))
+    dex = [] if last_dex is None else [{
+        "symbol": d.base_symbol, "chain": d.chain, "address": d.base_address, "price": d.price_usd,
+        "liquidity": d.liquidity_usd, "ch24h": d.change_24h_pct, "url": d.url,
+    } for d in session.scalars(
+        select(DexTick).where(DexTick.taken_at == last_dex, func.upper(DexTick.base_symbol) == sym)
+        .order_by(DexTick.liquidity_usd.desc().nulls_last()).limit(3))]
+    return {"coins": coins, "dex": dex}
