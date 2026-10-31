@@ -46,7 +46,7 @@ def test_requires_password(client):
 
 def test_index_served(client):
     r = client.get("/")
-    assert r.status_code == 200 and "CRAWLER" in r.text
+    assert r.status_code == 200 and "<title>Crawler Terminal</title>" in r.text
 
 
 def test_feed_hides_noise_by_default(client):
